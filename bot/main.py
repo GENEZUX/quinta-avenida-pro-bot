@@ -130,5 +130,9 @@ def webhook():
 def index():
     return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro'})
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'bot': 'Quinta Avenida Pro'})
+
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
