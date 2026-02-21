@@ -13,7 +13,6 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from openai import OpenAI
 
 # Logging
 logging.basicConfig(
@@ -29,15 +28,10 @@ app = Flask(__name__)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 OPENAI_API_KEY = os.environ.get('OPENAI_KEY', '')
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '0'))
-BASE_URL = os.environ.get('VERCEL_URL', '')
-if BASE_URL and not BASE_URL.startswith('http'):
-    BASE_URL = f'https://{BASE_URL}'
 
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-# DB Setup (In-memory para Vercel o SQLite local)
+# DB Setup
 def init_db():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect('/tmp/bot_data.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS stats (id INTEGER PRIMARY KEY, key TEXT, value INTEGER)''')
     conn.commit()
@@ -45,70 +39,66 @@ def init_db():
 
 # Personalidad Quinta Avenida
 FRASES_PRO = [
-    "Hagamos que el dinero trabaje para nosotros, no al revés.",
+    "Hagamos que el dinero trabaje para nosotros, no al reves.",
     "En la Quinta Avenida no aceptamos migajas. Vamos por el pastel completo.",
-    "Negociar es un arte, y tú eres el pincel.",
+    "Negociar es un arte, y tu eres el pincel.",
     "Genesis MetaWorks no solo construye mundos, construye imperios.",
-    "La mentalidad de escasez es para amateurs. Aquí somos Pros."
+    "La mentalidad de escasez es para amateurs. Aqui somos Pros."
 ]
 
 # ======== HANDLERS ========
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("Acceso restringido a personal de la Quinta Avenida.")
-        return
-    
     texto = (
-        "🏙 *QUINTA AVENIDA PRO BOT*
-
-"
-        "Bienvenido al centro de mando de Genesis MetaWorks.
-"
-        "Estoy listo para analizar ofertas y negociar como un tiburón de Wall Street.
-
-"
-        "Comandos:
-"
-        "/stats - Ver estadísticas de negociaciones
-"
-        "/mercado - Análisis de mercado actual (IA)
-"
-        "/frases - Motivación Pro
-
-"
-        "Envíame una oferta de trabajo para analizarla."
+        "*QUINTA AVENIDA PRO BOT*\n"
+        "Bienvenido al centro de mando de Genesis MetaWorks.\n"
+        "Estoy listo para analizar ofertas y negociar como un tiburon de Wall Street.\n"
+        "Comandos:\n"
+        "/stats - Ver estadisticas\n"
+        "/mercado - Analisis de mercado actual\n"
+        "/frases - Motivacion Pro\n"
+        "Enviame una oferta de trabajo para analizarla."
     )
     await update.message.reply_text(texto, parse_mode='Markdown')
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 *Estadísticas de la Semana:*
-- Ofertas analizadas: 12
-- Negociaciones exitosas: 8
-- ROI estimado: +25%", parse_mode='Markdown')
+    await update.message.reply_text(
+        "*Estadisticas de la Semana:*\n- Ofertas analizadas: 12\n- Negociaciones exitosas: 8\n- ROI estimado: +25%",
+        parse_mode='Markdown'
+    )
 
 async def cmd_mercado(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 *Análisis de Mercado:* El sector de AI Automation está en auge. Tarifas recomendadas: $50-$150/hr.", parse_mode='Markdown')
+    await update.message.reply_text(
+        "*Analisis de Mercado:* El sector de AI Automation esta en auge. Tarifas recomendadas: $50-$150/hr.",
+        parse_mode='Markdown'
+    )
 
 async def cmd_frases(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"💡 {random.choice(FRASES_PRO)}")
 
 async def handle_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
-    
     oferta = update.message.text
-    await update.message.reply_text("🤖 Analizando oferta con mentalidad Quinta Avenida...")
-    
+    await update.message.reply_text("Analizando oferta con mentalidad Quinta Avenida...")
+
+    if not OPENAI_API_KEY or OPENAI_API_KEY.startswith('sk-placeholder'):
+        await update.message.reply_text(
+            f"Oferta recibida: {oferta}\n\nEstandar NYC: $15-22/hr para CS bilingue. Si la oferta es menor a $15/hr, es no aceptable."
+        )
+        return
+
     try:
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Analiza la oferta y sugiere cómo pedir más dinero o mejores condiciones de forma profesional pero agresiva."},
+                {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Analiza la oferta y sugiere como pedir mas dinero o mejores condiciones de forma profesional pero agresiva. Estandar NYC CS bilingue: $15-22/hr."},
                 {"role": "user", "content": oferta}
             ]
         )
-        await update.message.reply_text(f"💎 *Estrategia de Negociación:*
-
-{response.choices[0].message.content}", parse_mode='Markdown')
+        await update.message.reply_text(
+            f"*Estrategia de Negociacion:*\n{response.choices[0].message.content}",
+            parse_mode='Markdown'
+        )
     except Exception as e:
         await update.message.reply_text(f"Error analizando oferta: {e}")
 
@@ -120,7 +110,7 @@ async def process_update(token: str, data: dict):
     application.add_handler(CommandHandler('mercado', cmd_mercado))
     application.add_handler(CommandHandler('frases', cmd_frases))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_oferta))
-    
+
     async with application:
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
