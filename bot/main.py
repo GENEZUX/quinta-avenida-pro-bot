@@ -10,13 +10,13 @@ WEBHOOK_URL = 'https://quinta-avenida-pro-bot.vercel.app/'
 
 
 def send_message(chat_id, text, reply_markup=None, parse_mode='Markdown'):
-    data = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
     if reply_markup:
-        data['reply_markup'] = reply_markup
+        payload['reply_markup'] = reply_markup
     url = f'https://api.telegram.org/bot{TOKEN}/sendMessage'
     headers = {'Content-Type': 'application/json'}
     req = urllib.request.Request(
-        url, data=json.dumps(data).encode('utf-8'), headers=headers, method='POST'
+        url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST'
     )
     try:
         with urllib.request.urlopen(req) as resp:
@@ -26,95 +26,67 @@ def send_message(chat_id, text, reply_markup=None, parse_mode='Markdown'):
         return None
 
 
+def tg_get(method):
+    url = f'https://api.telegram.org/bot{TOKEN}/{method}'
+    req = urllib.request.Request(url, method='GET')
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
 @app.route('/', methods=['POST'])
 def webhook():
     update = request.get_json()
     if not update:
         return 'ok'
     if 'message' in update:
-        message = update['message']
-        chat_id = message['chat']['id']
-        text = message.get('text', '')
+        msg = update['message']
+        chat_id = msg['chat']['id']
+        text = msg.get('text', '')
         if text == '/start':
-            keyboard = {
+            kb = {
                 'inline_keyboard': [
                     [{'text': 'Portafolio de Marca', 'callback_data': 'portfolio'}],
-                    [{'text': 'Planes de Servicio $200/mes', 'callback_data': 'plans'}],
+                    [{'text': 'Planes $200/mes', 'callback_data': 'plans'}],
                     [{'text': 'Puerto Rico Unido', 'callback_data': 'pr_unido'}],
                     [{'text': 'Contactar Agencia', 'callback_data': 'contact'}]
                 ]
             }
             send_message(
                 chat_id,
-                '*Quinta Avenida Pro - Asistente Inteligente*
-
-Bienvenida al sistema de gestion de marca premium de Barbosa Agency.ai
-
-Selecciona una opcion:',
-                reply_markup=keyboard
+                '*Quinta Avenida Pro*\n\nBienvenida a Barbosa Agency.ai\n\nSelecciona una opcion:',
+                reply_markup=kb
             )
         elif text == '/menu':
-            keyboard = {
+            kb = {
                 'inline_keyboard': [
                     [{'text': 'Ver Portafolio', 'callback_data': 'portfolio'}],
                     [{'text': 'Ver Planes', 'callback_data': 'plans'}]
                 ]
             }
-            send_message(chat_id, 'Menu principal:', reply_markup=keyboard)
+            send_message(chat_id, 'Menu principal:', reply_markup=kb)
         else:
-            send_message(chat_id, f'Recibido: {text}
-
-Usa /start para ver el menu completo.')
+            send_message(chat_id, f'Recibido: {text}\n\nUsa /start para el menu.')
     if 'callback_query' in update:
-        callback = update['callback_query']
-        chat_id = callback['message']['chat']['id']
-        data = callback['data']
-        if data == 'portfolio':
-            send_message(chat_id, '*Portafolio de Marca*
-
-Servicios:
-- Identidad visual premium
-- Estrategia de contenido
-- Social media management
-- Campanas digitales
-
-Contacta para ver ejemplos de trabajo.')
-        elif data == 'plans':
-            send_message(chat_id, '*Plan Barbosa Agency $200/mes*
-
-Incluyendo:
-- Gestion de marca completa
-- 4 sesiones mensuales de estrategia
-- Contenido digital personalizado
-- Reportes mensuales de KPIs
-- Acceso a IA Quinta Avenida Pro
-
-Contacta para iniciar: @BarbosaAgencyAI')
-        elif data == 'pr_unido':
-            send_message(chat_id, '*Puerto Rico Unido*
-
-Ecosistema Digital del Caribe - Barbosa Agency.ai
-
-Vision: Conectar empresas puertorriquenas con tecnologia de vanguardia AI para competir globalmente.
-
-Meta: $50-70M valor empresa en 5 anos.')
-        elif data == 'contact':
-            send_message(chat_id, '*Contactar Barbosa Agency*
-
-Email: info@barbosaagency.ai
-Telegram: @BarbosaAgencyAI
-Web: barbosaagency.ai
-
-Especializados en:
-- Branding con IA
-- Automatizacion de marketing
-- Puerto Rico mercado hispanohablante')
+        cb = update['callback_query']
+        chat_id = cb['message']['chat']['id']
+        data = cb.get('data', '')
+        msgs = {
+            'portfolio': '*Portafolio*\n- Identidad visual\n- Social media\n- Campanas digitales',
+            'plans': '*Plan $200/mes*\n- Gestion de marca\n- 4 sesiones estrategia\n- Contenido personalizado\n- Reportes KPIs',
+            'pr_unido': '*Puerto Rico Unido*\nEcosistema Digital del Caribe\nMeta: $50-70M en 5 anos.',
+            'contact': '*Contacto*\nEmail: info@barbosaagency.ai\nTelegram: @BarbosaAgencyAI'
+        }
+        if data in msgs:
+            send_message(chat_id, msgs[data])
     return 'ok'
 
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({'bot': 'Quinta Avenida Pro', 'status': 'online', 'agency': 'Barbosa Agency.ai'})
+    return jsonify({'bot': 'Quinta Avenida Pro', 'status': 'online'})
 
 
 @app.route('/health', methods=['GET'])
@@ -125,29 +97,22 @@ def health():
 @app.route('/set_webhook', methods=['GET'])
 def set_webhook():
     url = f'https://api.telegram.org/bot{TOKEN}/setWebhook'
-    data = {'url': WEBHOOK_URL}
+    payload = {'url': WEBHOOK_URL}
     headers = {'Content-Type': 'application/json'}
     req = urllib.request.Request(
-        url, data=json.dumps(data).encode('utf-8'), headers=headers, method='POST'
+        url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST'
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode())
-            return jsonify(result)
+            return jsonify(json.loads(resp.read().decode()))
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/getme', methods=['GET'])
 def getme():
-    url = f'https://api.telegram.org/bot{TOKEN}/getMe'
-    req = urllib.request.Request(url, method='GET')
-    try:
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode())
-            return jsonify(result)
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    result = tg_get('getMe')
+    return jsonify(result)
 
 
 if __name__ == '__main__':
