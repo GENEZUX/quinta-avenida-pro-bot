@@ -76,7 +76,7 @@ async def handle_update(data: dict):
             if not OPENAI_API_KEY or OPENAI_API_KEY.startswith('sk-placeholder'):
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=f"Oferta recibida: {text}\n\nEstandar NYC: $15-22/hr para CS bilingue. Si la oferta es menor a $15/hr, es inaceptable. Negocia al alza."
+                    text=f"Oferta recibida: {text}\n\nEstandar NYC: $15-22/hr para CS bilingue. Negocia al alza."
                 )
                 return
             try:
@@ -85,17 +85,33 @@ async def handle_update(data: dict):
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Analiza la oferta y sugiere como pedir mas dinero o mejores condiciones de forma profesional pero agresiva. Estandar NYC CS bilingue: $15-22/hr."},
+                        {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Estandar NYC CS bilingue: $15-22/hr."},
                         {"role": "user", "content": text}
                     ]
                 )
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=f"*Estrategia de Negociacion:*\n{response.choices[0].message.content}",
+                    text=f"*Estrategia:*\n{response.choices[0].message.content}",
                     parse_mode='Markdown'
                 )
             except Exception as e:
-                await bot.send_message(chat_id=chat_id, text=f"Error analizando oferta: {e}")
+                await bot.send_message(chat_id=chat_id, text=f"Error: {e}")
+
+
+def tg_api(path):
+    url = f'https://api.telegram.org/bot{TOKEN}/{path}'
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def tg_post(path, payload):
+    url = f'https://api.telegram.org/bot{TOKEN}/{path}'
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -107,37 +123,35 @@ def webhook():
         logger.error(f"Webhook error: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+
 @app.route('/set_webhook')
 def set_webhook():
     try:
         webhook_url = 'https://quinta-avenida-pro-bot.vercel.app/webhook'
-        api_url = f'https://api.telegram.org/bot{TOKEN}/setWebhook'
-        payload = json.dumps({'url': webhook_url}).encode('utf-8')
-        req = urllib.request.Request(api_url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
+        result = tg_post('setWebhook', {'url': webhook_url})
         return jsonify(result)
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-        @app.route('/getme')
+
+@app.route('/getme')
 def getme():
     try:
-        api_url = f'https://api.telegram.org/bot{TOKEN}/getMe'
-        req = urllib.request.Request(api_url)
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
+        result = tg_api('getMe')
         return jsonify(result)
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
 
 @app.route('/')
 def index():
-    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.1'})
+    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.2'})
+
 
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'bot': 'Quinta Avenida Pro'})
+
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
