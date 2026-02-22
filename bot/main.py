@@ -2,9 +2,10 @@ import os
 import asyncio
 import random
 import logging
+import json
+import urllib.request
 from flask import Flask, request, jsonify
 from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -108,15 +109,20 @@ def webhook():
 
 @app.route('/set_webhook')
 def set_webhook():
-    import requests
-    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-    webhook_url = f"https://quinta-avenida-pro-bot.vercel.app/webhook"
-    r = requests.post(url, json={'url': webhook_url})
-    return jsonify(r.json())
+    try:
+        webhook_url = 'https://quinta-avenida-pro-bot.vercel.app/webhook'
+        api_url = f'https://api.telegram.org/bot{TOKEN}/setWebhook'
+        payload = json.dumps({'url': webhook_url}).encode('utf-8')
+        req = urllib.request.Request(api_url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 @app.route('/')
 def index():
-    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.0'})
+    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.1'})
 
 @app.route('/health')
 def health():
