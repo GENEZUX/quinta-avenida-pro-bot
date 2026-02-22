@@ -120,6 +120,17 @@ def set_webhook():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+        @app.route('/getme')
+def getme():
+    try:
+        api_url = f'https://api.telegram.org/bot{TOKEN}/getMe'
+        req = urllib.request.Request(api_url)
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 @app.route('/')
 def index():
     return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.1'})
