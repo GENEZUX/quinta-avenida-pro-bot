@@ -9,11 +9,8 @@ TOKEN = os.environ.get('TELEGRAM_TOKEN', '8116584281:AAFrf7l-Q48H09VjL36-j8T88C2
 WEBHOOK_URL = 'https://quinta-avenida-pro-bot.vercel.app/'
 
 
-def send_message(chat_id, text, reply_markup=None, parse_mode='Markdown'):
-    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
-    if reply_markup:
-        payload['reply_markup'] = reply_markup
-    url = f'https://api.telegram.org/bot{TOKEN}/sendMessage'
+def tg_post(method, payload):
+    url = f'https://api.telegram.org/bot{TOKEN}/{method}'
     headers = {'Content-Type': 'application/json'}
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST'
@@ -23,7 +20,7 @@ def send_message(chat_id, text, reply_markup=None, parse_mode='Markdown'):
             return json.loads(resp.read().decode())
     except Exception as e:
         print(f'Error: {e}')
-        return None
+        return {'ok': False, 'error': str(e)}
 
 
 def tg_get(method):
@@ -36,15 +33,26 @@ def tg_get(method):
         return {'ok': False, 'error': str(e)}
 
 
+def send_message(chat_id, text, reply_markup=None, parse_mode='Markdown', message_thread_id=None):
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
+    if message_thread_id:
+        payload['message_thread_id'] = message_thread_id
+    return tg_post('sendMessage', payload)
+
+
 @app.route('/', methods=['POST'])
 def webhook():
     update = request.get_json()
     if not update:
         return 'ok'
+    thread_id = None
     if 'message' in update:
         msg = update['message']
         chat_id = msg['chat']['id']
         text = msg.get('text', '')
+        thread_id = msg.get('message_thread_id', None)
         if text == '/start':
             kb = {
                 'inline_keyboard': [
@@ -57,7 +65,8 @@ def webhook():
             send_message(
                 chat_id,
                 '*Quinta Avenida Pro*\n\nBienvenida a Barbosa Agency.ai\n\nSelecciona una opcion:',
-                reply_markup=kb
+                reply_markup=kb,
+                message_thread_id=thread_id
             )
         elif text == '/menu':
             kb = {
@@ -66,12 +75,13 @@ def webhook():
                     [{'text': 'Ver Planes', 'callback_data': 'plans'}]
                 ]
             }
-            send_message(chat_id, 'Menu principal:', reply_markup=kb)
+            send_message(chat_id, 'Menu principal:', reply_markup=kb, message_thread_id=thread_id)
         else:
-            send_message(chat_id, f'Recibido: {text}\n\nUsa /start para el menu.')
+            send_message(chat_id, f'Recibido: {text}\n\nUsa /start para el menu.', message_thread_id=thread_id)
     if 'callback_query' in update:
         cb = update['callback_query']
         chat_id = cb['message']['chat']['id']
+        thread_id = cb['message'].get('message_thread_id', None)
         data = cb.get('data', '')
         msgs = {
             'portfolio': '*Portafolio*\n- Identidad visual\n- Social media\n- Campanas digitales',
@@ -80,7 +90,8 @@ def webhook():
             'contact': '*Contacto*\nEmail: info@barbosaagency.ai\nTelegram: @BarbosaAgencyAI'
         }
         if data in msgs:
-            send_message(chat_id, msgs[data])
+            send_message(chat_id, msgs[data], message_thread_id=thread_id)
+        tg_post('answerCallbackQuery', {'callback_query_id': cb['id']})
     return 'ok'
 
 
@@ -96,17 +107,23 @@ def health():
 
 @app.route('/set_webhook', methods=['GET'])
 def set_webhook():
-    url = f'https://api.telegram.org/bot{TOKEN}/setWebhook'
-    payload = {'url': WEBHOOK_URL}
-    headers = {'Content-Type': 'application/json'}
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST'
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return jsonify(json.loads(resp.read().decode()))
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    result = tg_post('setWebhook', {
+        'url': WEBHOOK_URL,
+        'allowed_updates': ['message', 'callback_query', 'channel_post', 'edited_message']
+    })
+    return jsonify(result)
+
+
+@app.route('/delete_webhook', methods=['GET'])
+def delete_webhook():
+    result = tg_post('deleteWebhook', {'drop_pending_updates': True})
+    return jsonify(result)
+
+
+@app.route('/webhook_info', methods=['GET'])
+def webhook_info():
+    result = tg_get('getWebhookInfo')
+    return jsonify(result)
 
 
 @app.route('/getme', methods=['GET'])
