@@ -2,42 +2,22 @@ import os
 import asyncio
 import random
 import logging
-import sqlite3
-from datetime import datetime
 from flask import Flask, request, jsonify
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
-)
+from telegram import Bot, Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Flask app
 app = Flask(__name__)
 
-# Config desde variables de entorno
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 OPENAI_API_KEY = os.environ.get('OPENAI_KEY', '')
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '0'))
 
-# DB Setup
-def init_db():
-    conn = sqlite3.connect('/tmp/bot_data.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS stats (id INTEGER PRIMARY KEY, key TEXT, value INTEGER)''')
-    conn.commit()
-    conn.close()
-
-# Personalidad Quinta Avenida
 FRASES_PRO = [
     "Hagamos que el dinero trabaje para nosotros, no al reves.",
     "En la Quinta Avenida no aceptamos migajas. Vamos por el pastel completo.",
@@ -46,89 +26,97 @@ FRASES_PRO = [
     "La mentalidad de escasez es para amateurs. Aqui somos Pros."
 ]
 
-# ======== HANDLERS ========
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = (
-        "*QUINTA AVENIDA PRO BOT*\n"
-        "Bienvenido al centro de mando de Genesis MetaWorks.\n"
-        "Estoy listo para analizar ofertas y negociar como un tiburon de Wall Street.\n"
-        "Comandos:\n"
-        "/stats - Ver estadisticas\n"
-        "/mercado - Analisis de mercado actual\n"
-        "/frases - Motivacion Pro\n"
-        "Enviame una oferta de trabajo para analizarla."
-    )
-    await update.message.reply_text(texto, parse_mode='Markdown')
+async def handle_update(data: dict):
+    bot = Bot(token=TOKEN)
+    async with bot:
+        update = Update.de_json(data, bot)
+        msg = update.message
+        if not msg or not msg.text:
+            return
+        text = msg.text.strip()
+        chat_id = msg.chat_id
 
-async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "*Estadisticas de la Semana:*\n- Ofertas analizadas: 12\n- Negociaciones exitosas: 8\n- ROI estimado: +25%",
-        parse_mode='Markdown'
-    )
+        if text == '/start':
+            respuesta = (
+                "*QUINTA AVENIDA PRO BOT*\n"
+                "Bienvenido al centro de mando de Genesis MetaWorks.\n"
+                "Estoy listo para analizar ofertas y negociar como un tiburon de Wall Street.\n\n"
+                "Comandos:\n"
+                "/stats - Ver estadisticas\n"
+                "/mercado - Analisis de mercado actual\n"
+                "/frases - Motivacion Pro\n\n"
+                "Enviame una oferta de trabajo para analizarla."
+            )
+            await bot.send_message(chat_id=chat_id, text=respuesta, parse_mode='Markdown')
 
-async def cmd_mercado(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "*Analisis de Mercado:* El sector de AI Automation esta en auge. Tarifas recomendadas: $50-$150/hr.",
-        parse_mode='Markdown'
-    )
+        elif text == '/stats':
+            await bot.send_message(
+                chat_id=chat_id,
+                text="*Estadisticas de la Semana:*\n- Ofertas analizadas: 12\n- Negociaciones exitosas: 8\n- ROI estimado: +25%",
+                parse_mode='Markdown'
+            )
 
-async def cmd_frases(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"💡 {random.choice(FRASES_PRO)}")
+        elif text == '/mercado':
+            await bot.send_message(
+                chat_id=chat_id,
+                text="*Analisis de Mercado:* El sector de AI Automation esta en auge. Tarifas recomendadas: $50-$150/hr.",
+                parse_mode='Markdown'
+            )
 
-async def handle_oferta(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    oferta = update.message.text
-    await update.message.reply_text("Analizando oferta con mentalidad Quinta Avenida...")
+        elif text == '/frases':
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"*Frase Pro:* {random.choice(FRASES_PRO)}",
+                parse_mode='Markdown'
+            )
 
-    if not OPENAI_API_KEY or OPENAI_API_KEY.startswith('sk-placeholder'):
-        await update.message.reply_text(
-            f"Oferta recibida: {oferta}\n\nEstandar NYC: $15-22/hr para CS bilingue. Si la oferta es menor a $15/hr, es no aceptable."
-        )
-        return
+        elif not text.startswith('/'):
+            await bot.send_message(chat_id=chat_id, text="Analizando oferta con mentalidad Quinta Avenida...")
+            if not OPENAI_API_KEY or OPENAI_API_KEY.startswith('sk-placeholder'):
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Oferta recibida: {text}\n\nEstandar NYC: $15-22/hr para CS bilingue. Si la oferta es menor a $15/hr, es inaceptable. Negocia al alza."
+                )
+                return
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=OPENAI_API_KEY)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Analiza la oferta y sugiere como pedir mas dinero o mejores condiciones de forma profesional pero agresiva. Estandar NYC CS bilingue: $15-22/hr."},
+                        {"role": "user", "content": text}
+                    ]
+                )
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"*Estrategia de Negociacion:*\n{response.choices[0].message.content}",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                await bot.send_message(chat_id=chat_id, text=f"Error analizando oferta: {e}")
 
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Eres un experto negociador de la Quinta Avenida en Nueva York. Analiza la oferta y sugiere como pedir mas dinero o mejores condiciones de forma profesional pero agresiva. Estandar NYC CS bilingue: $15-22/hr."},
-                {"role": "user", "content": oferta}
-            ]
-        )
-        await update.message.reply_text(
-            f"*Estrategia de Negociacion:*\n{response.choices[0].message.content}",
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        await update.message.reply_text(f"Error analizando oferta: {e}")
-
-# ======== CORE SERVERLESS PATTERN ========
-async def process_update(token: str, data: dict):
-    application = Application.builder().token(token).build()
-    application.add_handler(CommandHandler('start', cmd_start))
-    application.add_handler(CommandHandler('stats', cmd_stats))
-    application.add_handler(CommandHandler('mercado', cmd_mercado))
-    application.add_handler(CommandHandler('frases', cmd_frases))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_oferta))
-
-    async with application:
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-
-# ======== FLASK ROUTES ========
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         data = request.get_json(force=True)
-        asyncio.run(process_update(TOKEN, data))
+        asyncio.run(handle_update(data))
         return jsonify({'ok': True})
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+@app.route('/set_webhook')
+def set_webhook():
+    import requests
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
+    webhook_url = f"https://quinta-avenida-pro-bot.vercel.app/webhook"
+    r = requests.post(url, json={'url': webhook_url})
+    return jsonify(r.json())
+
 @app.route('/')
 def index():
-    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro'})
+    return jsonify({'status': 'running', 'bot': 'Quinta Avenida Pro', 'version': '2.0'})
 
 @app.route('/health')
 def health():
