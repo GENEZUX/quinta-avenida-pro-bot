@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-TOKEN = os.environ.get('TELEGRAM_TOKEN', '8116584281:AAFrf7l-Q48H09VjL36-j8T88C22Xz-G7Ww')
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '8447615128:AAEQAar0cg8FZohRFpRbGG3FusSS1hyN12s')
 WEBHOOK_URL = 'https://quinta-avenida-pro-bot.vercel.app/'
 
 
